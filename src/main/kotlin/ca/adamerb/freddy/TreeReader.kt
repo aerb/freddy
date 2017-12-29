@@ -1,6 +1,14 @@
 package ca.adamerb.freddy
 
-fun readObject(reader: JsonTokenReader): JsonObject {
+private fun readJsonValue(reader: JsonTokenReader): JsonElement {
+    return when(reader.peakNext()) {
+        SymbolType.StartObject -> readJsonObject(reader)
+        SymbolType.TextValue -> JsonString(reader.readString())
+        else -> throw IllegalStateException("Unexpected symbol ${reader.peakNext()}")
+    }
+}
+
+private fun readJsonObject(reader: JsonTokenReader): JsonObject {
     val map = LinkedHashMap<String, JsonElement>()
     reader.startObject()
     objectLoop@ while (true) {
@@ -8,19 +16,19 @@ fun readObject(reader: JsonTokenReader): JsonObject {
              SymbolType.FieldName -> {
                  val field = reader.readFieldName()
                  reader.startValue()
-                 map[field] = when(reader.peakNext()) {
-                     SymbolType.StartObject -> readObject(reader)
-                     SymbolType.TextValue -> JsonString(reader.readString())
-                     else -> throw IllegalStateException("Unexpected symbol ${reader.peakNext()}")
-                 }
+                 map[field] = readJsonValue(reader)
                  reader.endValue()
              }
-            SymbolType.EndObject -> {
-                break@objectLoop
-            }
+            SymbolType.EndObject -> break@objectLoop
             else -> throw IllegalStateException("Unexpected symbol ${reader.peakNext()}")
         }
     }
     reader.endObject()
     return JsonObject(map)
+}
+
+fun readJsonTree(reader: JsonTokenReader): JsonElement {
+    val json = readJsonValue(reader)
+    check(json is JsonObject || json is JsonArray)
+    return json
 }
