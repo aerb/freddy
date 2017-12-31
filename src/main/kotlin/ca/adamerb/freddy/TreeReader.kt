@@ -1,25 +1,46 @@
 package ca.adamerb.freddy
 
-private fun readJsonValue(reader: JsonTokenReader): JsonElement {
+import ca.adamerb.freddy.SymbolType.*
+
+private fun readJsonValue(reader: JsonTokenizer): JsonElement {
     return when(reader.peakNext()) {
-        SymbolType.StartObject -> readJsonObject(reader)
-        SymbolType.TextValue -> JsonString(reader.readString())
+        StartObject -> readJsonObject(reader)
+        StartArray -> readJsonArray(reader)
+        TextValue -> JsonString(reader.readString())
+        NumberValue -> reader.readNumber()
+        BoolValue -> JsonBool(reader.readBoolean())
         else -> throw IllegalStateException("Unexpected symbol ${reader.peakNext()}")
     }
 }
 
-private fun readJsonObject(reader: JsonTokenReader): JsonObject {
+private fun readJsonArray(reader: JsonTokenizer): JsonArray {
+    val list = ArrayList<JsonElement>()
+    reader.startArray()
+    arrayLoop@ while (true) {
+        if (reader.peakNext() != EndArray) {
+            reader.startValue()
+            list += readJsonValue(reader)
+            reader.endValue()
+        } else {
+            break@arrayLoop
+        }
+    }
+    reader.endArray()
+    return JsonArray(list)
+}
+
+private fun readJsonObject(reader: JsonTokenizer): JsonObject {
     val map = LinkedHashMap<String, JsonElement>()
     reader.startObject()
     objectLoop@ while (true) {
         when (reader.peakNext()) {
-             SymbolType.FieldName -> {
-                 val field = reader.readFieldName()
-                 reader.startValue()
-                 map[field] = readJsonValue(reader)
-                 reader.endValue()
+             FieldName -> {
+                val field = reader.readFieldName()
+                reader.startValue()
+                map[field] = readJsonValue(reader)
+                reader.endValue()
              }
-            SymbolType.EndObject -> break@objectLoop
+            EndObject -> break@objectLoop
             else -> throw IllegalStateException("Unexpected symbol ${reader.peakNext()}")
         }
     }
@@ -27,7 +48,7 @@ private fun readJsonObject(reader: JsonTokenReader): JsonObject {
     return JsonObject(map)
 }
 
-fun readJsonTree(reader: JsonTokenReader): JsonElement {
+fun readJsonTree(reader: JsonTokenizer): JsonElement {
     val json = readJsonValue(reader)
     check(json is JsonObject || json is JsonArray)
     return json
